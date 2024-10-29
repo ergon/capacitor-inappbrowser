@@ -216,6 +216,7 @@ open class WKWebViewController: UIViewController {
         self.edgesForExtendedLayout = [.bottom]
 
         let webConfiguration = WKWebViewConfiguration()
+        webConfiguration.allowsInlineMediaPlayback = true
         let webView = WKWebView(frame: .zero, configuration: webConfiguration)
 
         if webView.responds(to: Selector(("setInspectable:"))) {
