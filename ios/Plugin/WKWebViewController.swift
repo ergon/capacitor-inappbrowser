@@ -315,6 +315,16 @@ open class WKWebViewController: UIViewController {
             setUpState()
             self.viewWasPresented = true
         }
+
+        if let doneButton = self.navigationItem.rightBarButtonItem, doneButton.style == .done {
+            let closeButton = UIBarButtonItem(barButtonSystemItem: .stop, target: self, action: #selector(closeWebView))
+            closeButton.tintColor = UIColor.black
+            self.navigationItem.rightBarButtonItem = closeButton
+        }
+    }
+
+    @objc func closeWebView() {
+        self.dismiss(animated: true, completion: nil)
     }
 
     override open func viewWillDisappear(_ animated: Bool) {
