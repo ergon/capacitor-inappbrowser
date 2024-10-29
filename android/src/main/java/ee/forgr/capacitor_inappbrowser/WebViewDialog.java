@@ -96,6 +96,7 @@ public class WebViewDialog extends Dialog {
     _webView.getSettings().setUseWideViewPort(true);
     _webView.getSettings().setAllowFileAccessFromFileURLs(true);
     _webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
+    _webView.setBackgroundColor(Color.WHITE);
 
     _webView.setWebViewClient(new WebViewClient());
 
