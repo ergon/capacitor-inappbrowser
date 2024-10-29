@@ -19,6 +19,7 @@ export interface BtnEvent {
 
 export type UrlChangeListener = (state: UrlEvent) => void;
 export type ConfirmBtnListener = (state: BtnEvent) => void;
+export type ButtonNearListener = (state: {}) => void;
 
 export enum BackgroundColor {
   WHITE = "white",
@@ -42,7 +43,11 @@ export interface GetCookieOptions {
 
 export interface ClearCookieOptions {
   url: string;
-  cache?: boolean;
+}
+
+export interface Credentials {
+  username: string;
+  password: string;
 }
 
 export interface OpenOptions {
@@ -56,6 +61,11 @@ export interface OpenOptions {
    * @since 0.1.0
    */
   headers?: Headers;
+  /**
+   * Credentials to send with the request and all subsequent requests for the same host.
+   * @since 6.1.0
+   */
+  credentials?: Credentials;
   /**
    * if true, the browser will be presented after the page is loaded, if false, the browser will be presented immediately.
    * @since 0.1.0
@@ -82,6 +92,11 @@ export interface OpenWebViewOptions {
    * @since 0.1.0
    */
   headers?: Headers;
+  /**
+   * Credentials to send with the request and all subsequent requests for the same host.
+   * @since 6.1.0
+   */
+  credentials?: Credentials;
   /**
    * share options
    * @since 0.1.0
@@ -212,6 +227,30 @@ export interface OpenWebViewOptions {
    * @default false
    */
   ignoreUntrustedSSLError?: boolean;
+  /**
+   * preShowScript: if isPresentAfterPageLoad is true and this variable is set the plugin will inject a script before showing the browser.
+   * This script will be run in an async context. The plugin will wait for the script to finish (max 10 seconds)
+   *
+   * @since 6.6.0
+   */
+  preShowScript?: String;
+  /**
+   * buttonNearDone allows for a creation of a custom button. Please see [buttonNearDone.md](/buttonNearDone.md) for more info.
+   *
+   * @since 6.7.0
+   */
+  buttonNearDone?: {
+    ios: {
+      iconType: "sf-symbol" | "asset";
+      icon: String;
+    };
+    android: {
+      iconType: "asset";
+      icon: String;
+      width?: number;
+      height?: number;
+    };
+  };
 }
 
 export interface InAppBrowserPlugin {
@@ -228,6 +267,19 @@ export interface InAppBrowserPlugin {
    * @since 0.5.0
    */
   clearCookies(options: ClearCookieOptions): Promise<any>;
+  /**
+   * Clear all cookies
+   *
+   * @since 6.5.0
+   */
+  clearAllCookies(): Promise<any>;
+
+  /**
+   * Clear cache
+   *
+   * @since 6.5.0
+   */
+  clearCache(): Promise<any>;
 
   /**
    * Get cookies for a specific URL.
@@ -235,7 +287,9 @@ export interface InAppBrowserPlugin {
    * @returns A promise that resolves with the cookies.
    */
   getCookies(options: GetCookieOptions): Promise<Record<string, string>>;
-
+  /**
+   * Close the webview.
+   */
   close(): Promise<any>;
   /**
    * Open url in a new webview with toolbars
@@ -247,6 +301,15 @@ export interface InAppBrowserPlugin {
    * Injects JavaScript code into the InAppBrowser window.
    */
   executeScript({ code }: { code: string }): Promise<void>;
+  /**
+   * Sends an event to the webview. you can listen to this event with addListener("messageFromWebview", listenerFunc: (event: Record<string, any>) => void)
+   * detail is the data you want to send to the webview, it's a requirement of Capacitor we cannot send direct objects
+   * Your object has to be serializable to JSON, so no functions or other non-JSON-serializable types are allowed.
+   */
+  postMessage(options: { detail: Record<string, any> }): Promise<void>;
+  /**
+   * Sets the URL of the webview.
+   */
   setUrl(options: { url: string }): Promise<any>;
   /**
    * Listen for url change, only for openWebView
@@ -256,6 +319,11 @@ export interface InAppBrowserPlugin {
   addListener(
     eventName: "urlChangeEvent",
     listenerFunc: UrlChangeListener,
+  ): Promise<PluginListenerHandle>;
+
+  addListener(
+    eventName: "buttonNearDoneClick",
+    listenerFunc: ButtonNearListener,
   ): Promise<PluginListenerHandle>;
 
   /**
@@ -276,7 +344,33 @@ export interface InAppBrowserPlugin {
     eventName: "confirmBtnClicked",
     listenerFunc: ConfirmBtnListener,
   ): Promise<PluginListenerHandle>;
+  /**
+   * Will be triggered when event is sent from webview, to send an event to the webview use window.mobileApp.postMessage({ "detail": { "message": "myMessage" } })
+   * detail is the data you want to send to the webview, it's a requirement of Capacitor we cannot send direct objects
+   * Your object has to be serializable to JSON, so no functions or other non-JSON-serializable types are allowed.
+   *
+   * This method is inject at runtime in the webview
+   */
+  addListener(
+    eventName: "messageFromWebview",
+    listenerFunc: (event: { detail: Record<string, any> }) => void,
+  ): Promise<PluginListenerHandle>;
 
+  /**
+   * Will be triggered when page is loaded
+   */
+  addListener(
+    eventName: "browserPageLoaded",
+    listenerFunc: () => void,
+  ): Promise<PluginListenerHandle>;
+
+  /**
+   * Will be triggered when page load error
+   */
+  addListener(
+    eventName: "pageLoadError",
+    listenerFunc: () => void,
+  ): Promise<PluginListenerHandle>;
   /**
    * Remove all listeners for this plugin.
    *

@@ -12,6 +12,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
+import androidx.annotation.NonNull;
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsClient;
 import androidx.browser.customtabs.CustomTabsIntent;
@@ -22,16 +23,22 @@ import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
-import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import java.util.ArrayList;
 import java.util.Iterator;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 @CapacitorPlugin(
   name = "InAppBrowser",
   permissions = {
     @Permission(alias = "camera", strings = { Manifest.permission.CAMERA }),
+    @Permission(
+      alias = "microphone",
+      strings = { Manifest.permission.RECORD_AUDIO }
+    ),
     @Permission(
       alias = "storage",
       strings = { Manifest.permission.READ_EXTERNAL_STORAGE }
@@ -55,12 +62,65 @@ public class InAppBrowserPlugin
 
   private PermissionRequest currentPermissionRequest;
 
+  public void handleMicrophonePermissionRequest(PermissionRequest request) {
+    this.currentPermissionRequest = request;
+    if (getPermissionState("microphone") != PermissionState.GRANTED) {
+      requestPermissionForAlias(
+        "microphone",
+        null,
+        "microphonePermissionCallback"
+      );
+    } else {
+      grantMicrophonePermission();
+    }
+  }
+
+  private void grantMicrophonePermission() {
+    if (currentPermissionRequest != null) {
+      currentPermissionRequest.grant(
+        new String[] { PermissionRequest.RESOURCE_AUDIO_CAPTURE }
+      );
+      currentPermissionRequest = null;
+    }
+  }
+
+  @PermissionCallback
+  private void microphonePermissionCallback(PluginCall call) {
+    if (getPermissionState("microphone") == PermissionState.GRANTED) {
+      grantCameraAndMicrophonePermission();
+    } else {
+      if (currentPermissionRequest != null) {
+        currentPermissionRequest.deny();
+        currentPermissionRequest = null;
+      }
+      call.reject("Microphone permission is required");
+    }
+  }
+
+  private void grantCameraAndMicrophonePermission() {
+    if (currentPermissionRequest != null) {
+      currentPermissionRequest.grant(
+        new String[] {
+          PermissionRequest.RESOURCE_VIDEO_CAPTURE,
+          PermissionRequest.RESOURCE_AUDIO_CAPTURE,
+        }
+      );
+      currentPermissionRequest = null;
+    }
+  }
+
   public void handleCameraPermissionRequest(PermissionRequest request) {
     this.currentPermissionRequest = request;
     if (getPermissionState("camera") != PermissionState.GRANTED) {
       requestPermissionForAlias("camera", null, "cameraPermissionCallback");
+    } else if (getPermissionState("microphone") != PermissionState.GRANTED) {
+      requestPermissionForAlias(
+        "microphone",
+        null,
+        "microphonePermissionCallback"
+      );
     } else {
-      grantCameraPermission();
+      grantCameraAndMicrophonePermission();
     }
   }
 
@@ -79,7 +139,16 @@ public class InAppBrowserPlugin
 
         if (resultCode == Activity.RESULT_OK) {
           if (data != null) {
-            results = new Uri[] { data.getData() };
+            String dataString = data.getDataString();
+            if (data.getClipData() != null) { // If multiple file selected
+              int count = data.getClipData().getItemCount();
+              results = new Uri[count];
+              for (int i = 0; i < count; i++) {
+                results[i] = data.getClipData().getItemAt(i).getUri();
+              }
+            } else if (dataString != null) { //if single file selected
+              results = new Uri[] { Uri.parse(dataString) };
+            }
           }
         }
 
@@ -107,6 +176,27 @@ public class InAppBrowserPlugin
     }
   }
 
+  @PermissionCallback
+  private void cameraPermissionCallback(PluginCall call) {
+    if (getPermissionState("camera") == PermissionState.GRANTED) {
+      if (getPermissionState("microphone") != PermissionState.GRANTED) {
+        requestPermissionForAlias(
+          "microphone",
+          null,
+          "microphonePermissionCallback"
+        );
+      } else {
+        grantCameraAndMicrophonePermission();
+      }
+    } else {
+      if (currentPermissionRequest != null) {
+        currentPermissionRequest.deny();
+        currentPermissionRequest = null;
+      }
+      call.reject("Camera permission is required");
+    }
+  }
+
   private void grantCameraPermission() {
     if (currentPermissionRequest != null) {
       currentPermissionRequest.grant(
@@ -119,7 +209,7 @@ public class InAppBrowserPlugin
   CustomTabsServiceConnection connection = new CustomTabsServiceConnection() {
     @Override
     public void onCustomTabsServiceConnected(
-      ComponentName name,
+      @NonNull ComponentName name,
       CustomTabsClient client
     ) {
       customTabsClient = client;
@@ -136,24 +226,6 @@ public class InAppBrowserPlugin
       requestPermissionForAlias("camera", call, "cameraPermissionCallback");
     } else {
       call.resolve();
-    }
-  }
-
-  @PermissionCallback
-  private void cameraPermissionCallback(PluginCall call) {
-    if (getPermissionState("camera") == PermissionState.GRANTED) {
-      // Permission granted, notify the WebView to proceed
-      if (
-        webViewDialog != null && webViewDialog.currentPermissionRequest != null
-      ) {
-        webViewDialog.currentPermissionRequest.grant(
-          new String[] { PermissionRequest.RESOURCE_VIDEO_CAPTURE }
-        );
-        webViewDialog.currentPermissionRequest = null;
-      }
-      call.resolve();
-    } else {
-      call.reject("Camera permission is required");
     }
   }
 
@@ -227,22 +299,80 @@ public class InAppBrowserPlugin
   }
 
   @PluginMethod
+  public void clearCache(PluginCall call) {
+    CookieManager cookieManager = CookieManager.getInstance();
+    cookieManager.removeAllCookies(null);
+    cookieManager.flush();
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void clearAllCookies(PluginCall call) {
+    CookieManager cookieManager = CookieManager.getInstance();
+    cookieManager.removeAllCookies(null);
+    cookieManager.flush();
+    call.resolve();
+  }
+
+  @PluginMethod
   public void clearCookies(PluginCall call) {
     String url = call.getString("url", currentUrl);
-    Boolean clearCache = call.getBoolean("cache", false);
     if (url == null || TextUtils.isEmpty(url)) {
       call.reject("Invalid URL");
-    } else {
-      CookieManager cookieManager = CookieManager.getInstance();
-      String cookie = cookieManager.getCookie(url);
-      if (cookie != null) {
-        cookieManager.removeAllCookies(null);
-        if (Boolean.TRUE.equals(clearCache)) {
-          cookieManager.removeSessionCookies(null);
+      return;
+    }
+
+    Uri uri = Uri.parse(url);
+    String host = uri.getHost();
+    if (host == null || TextUtils.isEmpty(host)) {
+      call.reject("Invalid URL (Host is null)");
+      return;
+    }
+
+    CookieManager cookieManager = CookieManager.getInstance();
+    String cookieString = cookieManager.getCookie(url);
+    ArrayList<String> cookiesToRemove = new ArrayList<>();
+
+    if (cookieString != null) {
+      String[] cookies = cookieString.split("; ");
+
+      String domain = uri.getHost();
+
+      for (String cookie : cookies) {
+        String[] parts = cookie.split("=");
+        if (parts.length > 0) {
+          cookiesToRemove.add(parts[0].trim());
+          CookieManager.getInstance()
+            .setCookie(url, String.format("%s=del;", parts[0].trim()));
         }
       }
-      call.resolve();
     }
+
+    StringBuilder scriptToRun = new StringBuilder();
+    for (String cookieToRemove : cookiesToRemove) {
+      scriptToRun.append(
+        String.format(
+          "window.cookieStore.delete('%s', {name: '%s', domain: '%s'});",
+          cookieToRemove,
+          cookieToRemove,
+          url
+        )
+      );
+    }
+
+    Log.i("DelCookies", String.format("Script to run:\n%s", scriptToRun));
+
+    this.getActivity()
+      .runOnUiThread(
+        new Runnable() {
+          @Override
+          public void run() {
+            webViewDialog.executeScript(scriptToRun.toString());
+          }
+        }
+      );
+
+    call.resolve();
   }
 
   @PluginMethod
@@ -278,8 +408,13 @@ public class InAppBrowserPlugin
     final Options options = new Options();
     options.setUrl(url);
     options.setHeaders(call.getObject("headers"));
-    options.setShowReloadButton(call.getBoolean("showReloadButton", false));
-    options.setVisibleTitle(call.getBoolean("visibleTitle", true));
+    options.setCredentials(call.getObject("credentials"));
+    options.setShowReloadButton(
+      Boolean.TRUE.equals(call.getBoolean("showReloadButton", false))
+    );
+    options.setVisibleTitle(
+      Boolean.TRUE.equals(call.getBoolean("visibleTitle", true))
+    );
     if (Boolean.TRUE.equals(options.getVisibleTitle())) {
       options.setTitle(call.getString("title", "New Window"));
     } else {
@@ -290,19 +425,47 @@ public class InAppBrowserPlugin
     options.setIgnoreUntrustedSSLError(
       Boolean.TRUE.equals(call.getBoolean("ignoreUntrustedSSLError", false))
     );
+
+    try {
+      Options.ButtonNearDone buttonNearDone =
+        Options.ButtonNearDone.generateFromPluginCall(
+          call,
+          getActivity().getAssets()
+        );
+      options.setButtonNearDone(buttonNearDone);
+    } catch (IllegalArgumentException illegalArgumentException) {
+      call.reject(
+        String.format(
+          "ButtonNearDone rejected: %s",
+          illegalArgumentException.getMessage()
+        )
+      );
+    } catch (RuntimeException e) {
+      Log.e(
+        "WebViewDialog",
+        String.format("ButtonNearDone runtime error: %s", e)
+      );
+      call.reject(String.format("ButtonNearDone RuntimeException: %s", e));
+    }
+
     options.setShareDisclaimer(call.getObject("shareDisclaimer", null));
+    options.setPreShowScript(call.getString("preShowScript", null));
     options.setShareSubject(call.getString("shareSubject", null));
     options.setToolbarType(call.getString("toolbarType", ""));
     options.setActiveNativeNavigationForWebview(
-      call.getBoolean("activeNativeNavigationForWebview", false)
+      Boolean.TRUE.equals(
+        call.getBoolean("activeNativeNavigationForWebview", false)
+      )
     );
     options.setDisableGoBackOnNativeApplication(
-      call.getBoolean("disableGoBackOnNativeApplication", false)
+      Boolean.TRUE.equals(
+        call.getBoolean("disableGoBackOnNativeApplication", false)
+      )
     );
     options.setPresentAfterPageLoad(
-      call.getBoolean("isPresentAfterPageLoad", false)
+      Boolean.TRUE.equals(call.getBoolean("isPresentAfterPageLoad", false))
     );
-    if (call.getBoolean("closeModal", false)) {
+    if (Boolean.TRUE.equals(call.getBoolean("closeModal", false))) {
       options.setCloseModal(true);
       options.setCloseModalTitle(call.getString("closeModalTitle", "Close"));
       options.setCloseModalDescription(
@@ -336,6 +499,48 @@ public class InAppBrowserPlugin
         public void pageLoadError() {
           notifyListeners("pageLoadError", new JSObject());
         }
+
+        @Override
+        public void buttonNearDoneClicked() {
+          notifyListeners("buttonNearDoneClick", new JSObject());
+        }
+
+        @Override
+        public void javascriptCallback(String message) {
+          // Handle the message received from JavaScript
+          Log.d(
+            "WebViewDialog",
+            "Received message from JavaScript: " + message
+          );
+          // Process the message as needed
+          try {
+            // Parse the received message as a JSON object
+            JSONObject jsonMessage = new JSONObject(message);
+
+            // Create a new JSObject to send to the Capacitor plugin
+            JSObject jsObject = new JSObject();
+
+            // Iterate through the keys in the JSON object and add them to the JSObject
+            Iterator<String> keys = jsonMessage.keys();
+            while (keys.hasNext()) {
+              String key = keys.next();
+              jsObject.put(key, jsonMessage.get(key));
+            }
+
+            // Notify listeners with the parsed message
+            notifyListeners("messageFromWebview", jsObject);
+          } catch (JSONException e) {
+            Log.e(
+              "WebViewDialog",
+              "Error parsing JSON message: " + e.getMessage()
+            );
+
+            // If JSON parsing fails, send the raw message as a string
+            JSObject jsObject = new JSObject();
+            jsObject.put("rawMessage", message);
+            notifyListeners("messageFromWebview", jsObject);
+          }
+        }
       }
     );
     this.getActivity()
@@ -351,6 +556,31 @@ public class InAppBrowserPlugin
             );
             webViewDialog.presentWebView();
             webViewDialog.activity = InAppBrowserPlugin.this.getActivity();
+          }
+        }
+      );
+  }
+
+  @PluginMethod
+  public void postMessage(PluginCall call) {
+    if (webViewDialog == null) {
+      call.reject("WebView is not initialized");
+      return;
+    }
+    JSObject eventData = call.getObject("detail");
+    // Log event data
+    if (eventData == null) {
+      call.reject("No event data provided");
+      return;
+    }
+    Log.d("InAppBrowserPlugin", "Event data: " + eventData.toString());
+    this.getActivity()
+      .runOnUiThread(
+        new Runnable() {
+          @Override
+          public void run() {
+            webViewDialog.postMessageToJS(eventData);
+            call.resolve();
           }
         }
       );

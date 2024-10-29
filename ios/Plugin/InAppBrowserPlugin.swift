@@ -49,34 +49,52 @@ public class InAppBrowserPlugin: CAPPlugin {
         })
     }
 
+    @objc func clearAllCookies(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let dataStore = WKWebsiteDataStore.default()
+            let dataTypes = Set([WKWebsiteDataTypeCookies])
+
+            dataStore.removeData(ofTypes: dataTypes,
+                                 modifiedSince: Date(timeIntervalSince1970: 0)) {
+                call.resolve()
+            }
+        }
+    }
+
+    @objc func clearCache(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let dataStore = WKWebsiteDataStore.default()
+            let dataTypes = Set([WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache])
+
+            dataStore.removeData(ofTypes: dataTypes,
+                                 modifiedSince: Date(timeIntervalSince1970: 0)) {
+                call.resolve()
+            }
+        }
+    }
+
     @objc func clearCookies(_ call: CAPPluginCall) {
-        let dataStore = WKWebsiteDataStore.default()
-        let urlString = call.getString("url", "")
-        let clearCache = call.getBool("cache", false)
-
-        if clearCache {
-            URLCache.shared.removeAllCachedResponses()
-        }
-        if (urlString.isEmpty) {
-            HTTPCookieStorage.shared.cookies?.forEach(HTTPCookieStorage.shared.deleteCookie)
-            call.resolve()
-            return
-        }
-
-        guard let url = URL(string: urlString), let hostName = url.host else {
+        guard let url = call.getString("url"),
+              let host = URL(string: url)?.host else {
             call.reject("Invalid URL")
             return
         }
-        dataStore.httpCookieStore.getAllCookies { cookies in
-            let cookiesToDelete = cookies.filter { cookie in
-                cookie.domain == hostName || cookie.domain.hasSuffix(".\(hostName)") || hostName.hasSuffix(cookie.domain)
-            }
 
-            for cookie in cookiesToDelete {
-                dataStore.httpCookieStore.delete(cookie)
-            }
+        DispatchQueue.main.async {
+            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+                for cookie in cookies {
 
-            call.resolve()
+                    if cookie.domain == host || cookie.domain.hasSuffix(".\(host)") || host.hasSuffix(cookie.domain) {
+                        let semaphore = DispatchSemaphore(value: 1)
+                        WKWebsiteDataStore.default().httpCookieStore.delete(cookie) {
+                            semaphore.signal()
+                        }
+                        semaphore.wait()
+                    }
+                }
+
+                call.resolve()
+            }
         }
     }
 
@@ -89,16 +107,19 @@ public class InAppBrowserPlugin: CAPPlugin {
             return
         }
 
-        WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
-            var cookieDict = [String: String]()
-            for cookie in cookies {
+        DispatchQueue.main.async {
+            WKWebsiteDataStore.default().httpCookieStore.getAllCookies { cookies in
+                var cookieDict = [String: String]()
+                for cookie in cookies {
 
-                if (includeHttpOnly || !cookie.isHTTPOnly) && (cookie.domain == host || cookie.domain.hasSuffix(".\(host)") || host.hasSuffix(cookie.domain)) {
-                    cookieDict[cookie.name] = cookie.value
+                    if (includeHttpOnly || !cookie.isHTTPOnly) && (cookie.domain == host || cookie.domain.hasSuffix(".\(host)") || host.hasSuffix(cookie.domain)) {
+                        cookieDict[cookie.name] = cookie.value
+                    }
                 }
+                call.resolve(cookieDict)
             }
-            call.resolve(cookieDict)
         }
+
     }
 
     @objc func openWebView(_ call: CAPPluginCall) {
@@ -117,6 +138,39 @@ public class InAppBrowserPlugin: CAPPlugin {
             return
         }
 
+        var buttonNearDoneIcon: UIImage?
+        if let buttonNearDoneSettings = call.getObject("buttonNearDone") {
+            guard let iosSettingsRaw = buttonNearDoneSettings["ios"] else {
+                call.reject("IOS settings not found")
+                return
+            }
+            if !(iosSettingsRaw is JSObject) {
+                call.reject("IOS settings are not an object")
+                return
+            }
+            let iosSettings = iosSettingsRaw as! JSObject
+
+            guard let iconType = iosSettings["iconType"] as? String else {
+                call.reject("buttonNearDone.iconType is empty")
+                return
+            }
+            if iconType != "sf-symbol" && iconType != "asset" {
+                call.reject("IconType is neither 'sf-symbol' nor 'asset'")
+                return
+            }
+            guard let icon = iosSettings["icon"] as? String else {
+                call.reject("buttonNearDone.icon is empty")
+                return
+            }
+
+            if iconType == "sf-symbol" {
+                buttonNearDoneIcon = UIImage(systemName: icon)
+            } else {
+                // UIImage(resource: ImageResource(name: "public/monkey.svg", bundle: Bundle.main))
+                buttonNearDoneIcon = UIImage(named: icon, in: Bundle.main, with: nil)
+            }
+        }
+
         let headers = call.getObject("headers", [:]).mapValues { String(describing: $0 as Any) }
         let closeModal = call.getBool("closeModal", false)
         let closeModalTitle = call.getString("closeModalTitle", "Close")
@@ -124,6 +178,7 @@ public class InAppBrowserPlugin: CAPPlugin {
         let closeModalOk = call.getString("closeModalOk", "OK")
         let closeModalCancel = call.getString("closeModalCancel", "Cancel")
         let isInspectable = call.getBool("isInspectable", false)
+        let preventDeeplink = call.getBool("preventDeeplink", false)
         let isAnimated = call.getBool("isAnimated", true)
 
         var disclaimerContent = call.getObject("shareDisclaimer")
@@ -137,14 +192,18 @@ public class InAppBrowserPlugin: CAPPlugin {
         self.isPresentAfterPageLoad = call.getBool("isPresentAfterPageLoad", false)
         let showReloadButton = call.getBool("showReloadButton", false)
 
+        let credentials = self.readCredentials(call)
+
         DispatchQueue.main.async {
             let url = URL(string: urlString)
 
             if self.isPresentAfterPageLoad {
-                self.webViewController = WKWebViewController.init(url: url!, headers: headers, isInspectable: isInspectable)
+                self.webViewController = WKWebViewController.init(url: url!, headers: headers, isInspectable: isInspectable, credentials: credentials, preventDeeplink: preventDeeplink)
             } else {
                 self.webViewController = WKWebViewController.init()
                 self.webViewController?.setHeaders(headers: headers)
+                self.webViewController?.setCredentials(credentials: credentials)
+                self.webViewController?.setPreventDeeplink(preventDeeplink: preventDeeplink)
             }
 
             self.webViewController?.source = .remote(url!)
@@ -152,6 +211,9 @@ public class InAppBrowserPlugin: CAPPlugin {
             self.webViewController?.leftNavigationBarItemTypes = self.getToolbarItems(toolbarType: toolbarType)
             self.webViewController?.toolbarItemTypes = []
             self.webViewController?.doneBarButtonItemPosition = .right
+
+            self.webViewController?.buttonNearDoneIcon = buttonNearDoneIcon
+
             if call.getBool("showArrow", false) {
                 self.webViewController?.stopBarButtonItemImage = UIImage(named: "Forward@3x", in: Bundle(for: InAppBrowserPlugin.self), compatibleWith: nil)
             }
@@ -160,6 +222,7 @@ public class InAppBrowserPlugin: CAPPlugin {
             self.webViewController?.title = call.getString("title", "New Window")
             self.webViewController?.shareSubject = call.getString("shareSubject")
             self.webViewController?.shareDisclaimer = disclaimerContent
+            self.webViewController?.preShowScript = call.getString("preShowScript")
             self.webViewController?.websiteTitleInNavigationBar = call.getBool("visibleTitle", true)
             if closeModal {
                 self.webViewController?.closeModal = true
@@ -187,6 +250,7 @@ public class InAppBrowserPlugin: CAPPlugin {
             if !self.isPresentAfterPageLoad {
                 self.presentView(isAnimated: isAnimated)
             }
+            call.resolve()
         }
     }
 
@@ -227,6 +291,20 @@ public class InAppBrowserPlugin: CAPPlugin {
             return
         }
         self.webViewController?.executeScript(script: script)
+        call.resolve()
+    }
+
+    @objc func postMessage(_ call: CAPPluginCall) {
+        let eventData = call.getObject("detail", [:])
+        // Check if eventData is empty
+        if eventData.isEmpty {
+            call.reject("Event data must not be empty")
+            return
+        }
+        print("Event data: \(eventData)")
+
+        self.webViewController?.postMessageToJS(message: eventData)
+        call.resolve()
     }
 
     func isHexColorCode(_ input: String) -> Bool {
@@ -251,6 +329,7 @@ public class InAppBrowserPlugin: CAPPlugin {
         }
 
         let isInspectable = call.getBool("isInspectable", false)
+        let preventDeeplink = call.getBool("preventDeeplink", false)
 
         self.currentPluginCall = call
 
@@ -268,14 +347,18 @@ public class InAppBrowserPlugin: CAPPlugin {
 
         self.isPresentAfterPageLoad = call.getBool("isPresentAfterPageLoad", false)
 
+        let credentials = self.readCredentials(call)
+
         DispatchQueue.main.async {
             let url = URL(string: urlString)
 
             if self.isPresentAfterPageLoad {
-                self.webViewController = WKWebViewController.init(url: url!, headers: headers, isInspectable: isInspectable)
+                self.webViewController = WKWebViewController.init(url: url!, headers: headers, isInspectable: isInspectable, credentials: credentials, preventDeeplink: preventDeeplink)
             } else {
                 self.webViewController = WKWebViewController.init()
                 self.webViewController?.setHeaders(headers: headers)
+                self.webViewController?.setCredentials(credentials: credentials)
+                self.webViewController?.setPreventDeeplink(preventDeeplink: preventDeeplink)
             }
 
             self.webViewController?.source = .remote(url!)
@@ -299,6 +382,7 @@ public class InAppBrowserPlugin: CAPPlugin {
             if !self.isPresentAfterPageLoad {
                 self.presentView()
             }
+            call.resolve()
         }
     }
 
@@ -338,5 +422,14 @@ public class InAppBrowserPlugin: CAPPlugin {
 
     @objc func appWillResignActive(_ notification: NSNotification) {
         self.showPrivacyScreen()
+    }
+
+    private func readCredentials(_ call: CAPPluginCall) -> WKWebViewCredentials? {
+        var credentials: WKWebViewCredentials?
+        let credentialsDict = call.getObject("credentials", [:]).mapValues { String(describing: $0 as Any) }
+        if !credentialsDict.isEmpty, let username = credentialsDict["username"], let password = credentialsDict["password"] {
+            credentials = WKWebViewCredentials(username: username, password: password)
+        }
+        return credentials
     }
 }

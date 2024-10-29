@@ -2,6 +2,243 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [6.8.18](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.17...6.8.18) (2024-10-28)
+
+### [6.8.17](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.16...6.8.17) (2024-10-28)
+
+### [6.8.16](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.15...6.8.16) (2024-10-21)
+
+
+### Bug Fixes
+
+* **deps:** update dependency com.google.android.material:material to v1.12.0 ([52df8f0](https://github.com/Cap-go/capacitor-inappbrowser/commit/52df8f05a4bc5f6cb715b980f080b02eedecf921))
+
+### [6.8.15](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.14...6.8.15) (2024-10-21)
+
+### [6.8.14](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.13...6.8.14) (2024-10-21)
+
+### [6.8.13](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.12...6.8.13) (2024-10-18)
+
+
+### Bug Fixes
+
+* **deps:** update dependency com.android.tools.build:gradle to v8.7.1 ([5184cff](https://github.com/Cap-go/capacitor-inappbrowser/commit/5184cff1fd41fe95ca5ddf95db03258f96e3a962))
+
+### [6.8.12](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.11...6.8.12) (2024-10-18)
+
+
+### Bug Fixes
+
+* lint and issue ([4226f98](https://github.com/Cap-go/capacitor-inappbrowser/commit/4226f98706536b91f124801ed9b6528535f7b5b2))
+
+### [6.8.11](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.10...6.8.11) (2024-10-18)
+
+
+### Bug Fixes
+
+* issue with apple link ([b730cbc](https://github.com/Cap-go/capacitor-inappbrowser/commit/b730cbca7a0f6f39b268f9cb22fa968e9432fcb6))
+
+### [6.8.10](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.9...6.8.10) (2024-10-17)
+
+### [6.8.9](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.8...6.8.9) (2024-10-17)
+
+### [6.8.8](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.7...6.8.8) (2024-10-17)
+
+### [6.8.7](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.6...6.8.7) (2024-10-17)
+
+### [6.8.6](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.5...6.8.6) (2024-10-17)
+
+### [6.8.5](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.4...6.8.5) (2024-10-16)
+
+### [6.8.4](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.3...6.8.4) (2024-10-16)
+
+### [6.8.3](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.2...6.8.3) (2024-10-16)
+
+### [6.8.2](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.1...6.8.2) (2024-10-16)
+
+### [6.8.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.8.0...6.8.1) (2024-10-16)
+
+
+### Bug Fixes
+
+* lint ([ac11baf](https://github.com/Cap-go/capacitor-inappbrowser/commit/ac11bafa08ae430044a334bed8285ed5453ae580))
+
+## [6.8.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.7.1...6.8.0) (2024-10-15)
+
+
+### Features
+
+* use preventDeeplink parameter also on ios ([1da2890](https://github.com/Cap-go/capacitor-inappbrowser/commit/1da2890015994df8fd38b7dc58902a54d3aba75e))
+
+### [6.7.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.7.0...6.7.1) (2024-10-15)
+
+## [6.7.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.8...6.7.0) (2024-09-07)
+
+
+### Features
+
+* **Android:** Implement buttonNearDone part 1 ([635fc5b](https://github.com/Cap-go/capacitor-inappbrowser/commit/635fc5bfe3db272f7c5463b6383e0a102245cdfa))
+* finish buttonNearDone ([6c57219](https://github.com/Cap-go/capacitor-inappbrowser/commit/6c57219ce83bd2162c44f3447c18b0e242d5dbc7))
+* **IOS:** add buttonNearDone ([2bdd1bd](https://github.com/Cap-go/capacitor-inappbrowser/commit/2bdd1bd8998463b579f176d11b53678e052268e8))
+* **IOS:** finish custom button near done ([e7cae52](https://github.com/Cap-go/capacitor-inappbrowser/commit/e7cae52d6a84d8f27790750872a09ffe39e38195))
+* **IOS:** IOS specific settings && support for custom icons ([d045215](https://github.com/Cap-go/capacitor-inappbrowser/commit/d045215bbfd0a10b38927ec2e931daf9ef991ba2))
+
+### [6.6.8](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.7...6.6.8) (2024-09-05)
+
+### [6.6.7](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.6...6.6.7) (2024-09-05)
+
+### [6.6.6](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.5...6.6.6) (2024-09-05)
+
+
+### Bug Fixes
+
+* add mic perm on camera perm ([891ab1e](https://github.com/Cap-go/capacitor-inappbrowser/commit/891ab1e4f159276522c151b7cc7d4adb1aeaaf60))
+* Android studio lint ([619f5fb](https://github.com/Cap-go/capacitor-inappbrowser/commit/619f5fb1e332340f349453a3fd48d49c3b9ef652))
+* doc perms ([b2557a3](https://github.com/Cap-go/capacitor-inappbrowser/commit/b2557a3b2466c7d1de90e9b5e54cbb815430e178))
+
+### [6.6.5](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.4...6.6.5) (2024-09-04)
+
+
+### Bug Fixes
+
+* lint issue ([0bc34a7](https://github.com/Cap-go/capacitor-inappbrowser/commit/0bc34a73e07967b607d5c94366c282e1c4bc12ef))
+
+### [6.6.4](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.3...6.6.4) (2024-09-04)
+
+### [6.6.3](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.2...6.6.3) (2024-09-04)
+
+
+### Bug Fixes
+
+* node action ([a2e226a](https://github.com/Cap-go/capacitor-inappbrowser/commit/a2e226a114a60814a18656a024dbbfa7d954d350))
+
+### [6.6.2](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.1...6.6.2) (2024-09-04)
+
+### [6.6.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.6.0...6.6.1) (2024-09-03)
+
+
+### Bug Fixes
+
+* lint ([436459e](https://github.com/Cap-go/capacitor-inappbrowser/commit/436459e299dd2391fbd594366a457ed3b3b107c4))
+
+## [6.6.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.5.1...6.6.0) (2024-09-02)
+
+
+### Features
+
+* **IOS:** implement preShowScript ([e5f15b2](https://github.com/Cap-go/capacitor-inappbrowser/commit/e5f15b20f709edc93c1937a85dc67076d306517c))
+
+
+### Bug Fixes
+
+* handle preShowScript onReload ([e68034d](https://github.com/Cap-go/capacitor-inappbrowser/commit/e68034db08f30a3fd5ae4a26ae6deba0252cce81))
+* **IOS:** Wait max 10s for the script to finish ([e1ede31](https://github.com/Cap-go/capacitor-inappbrowser/commit/e1ede31e2d3b2ce9ec6e56ef184f50fab6e276be))
+* **WiP:** some fixes ([f255b1b](https://github.com/Cap-go/capacitor-inappbrowser/commit/f255b1b55fbfcaef77a01191683d7e80f35709cf))
+
+### [6.5.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.5.0...6.5.1) (2024-08-30)
+
+
+### Bug Fixes
+
+* create clearCache method to have all topic separated ([a300c2f](https://github.com/Cap-go/capacitor-inappbrowser/commit/a300c2fd62ebcfc5d08fe5ff47f75a6ff28f6617))
+
+## [6.5.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.4.4...6.5.0) (2024-08-30)
+
+
+### Features
+
+* add clearAllCookies and fix clearCookies ([b8113be](https://github.com/Cap-go/capacitor-inappbrowser/commit/b8113be66e4c71ebbc6e0625cc196ca6f33ccec0))
+
+
+### Bug Fixes
+
+* multi upload ([4e7e90b](https://github.com/Cap-go/capacitor-inappbrowser/commit/4e7e90b3735623525c0e85cc7e0dab921cd80cfd))
+
+### [6.4.4](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.4.3...6.4.4) (2024-08-30)
+
+### [6.4.3](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.4.2...6.4.3) (2024-08-30)
+
+
+### Bug Fixes
+
+* lint issue ([f90c800](https://github.com/Cap-go/capacitor-inappbrowser/commit/f90c800e673334833a717d8dadc3f3019065df36))
+
+### [6.4.2](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.4.1...6.4.2) (2024-08-30)
+
+### [6.4.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.4.0...6.4.1) (2024-08-30)
+
+## [6.4.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.3.4...6.4.0) (2024-08-30)
+
+
+### Features
+
+* add post message between JS and mobileApp ([658bf81](https://github.com/Cap-go/capacitor-inappbrowser/commit/658bf81b4b5618a488cb75fae79b6f329ae18041))
+
+### [6.3.4](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.3.3...6.3.4) (2024-08-29)
+
+
+### Bug Fixes
+
+* evaluateJavaScript issue ([2790300](https://github.com/Cap-go/capacitor-inappbrowser/commit/2790300876e42cd1be2a08c12e2fa841d5f6785f))
+
+### [6.3.3](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.3.2...6.3.3) (2024-08-28)
+
+### [6.3.2](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.3.1...6.3.2) (2024-08-28)
+
+
+### Bug Fixes
+
+* upgrade constraintlayout ([9009e54](https://github.com/Cap-go/capacitor-inappbrowser/commit/9009e5404feccc65131b652eb5c94c9a75c8b002))
+
+### [6.3.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.3.0...6.3.1) (2024-08-28)
+
+
+### Bug Fixes
+
+* package upgrade and lint ([8e04191](https://github.com/Cap-go/capacitor-inappbrowser/commit/8e04191cf019630c106250d699e77c6919f79e33))
+
+## [6.3.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.2.1...6.3.0) (2024-08-28)
+
+
+### Features
+
+* add support to specify request credentials ([3adbc42](https://github.com/Cap-go/capacitor-inappbrowser/commit/3adbc426967e50318883a6b5de3f7209ade89010))
+
+
+### Bug Fixes
+
+* lint ([1eb1e2e](https://github.com/Cap-go/capacitor-inappbrowser/commit/1eb1e2e0d956dd84378feb8f7b579d2cd448d334))
+
+### [6.2.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.2.0...6.2.1) (2024-08-28)
+
+
+### Bug Fixes
+
+* revert GPT useless code ([dd11382](https://github.com/Cap-go/capacitor-inappbrowser/commit/dd113824205b138cb5abe2c1cb28e9059c9544ce))
+
+## [6.2.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.1.1...6.2.0) (2024-08-28)
+
+
+### Features
+
+* use preventDeeplink parameter also on ios ([ea2ee5b](https://github.com/Cap-go/capacitor-inappbrowser/commit/ea2ee5b72f6f663c5041fd24d127a8c263878e21))
+
+### [6.1.1](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.1.0...6.1.1) (2024-08-28)
+
+## [6.1.0](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.0.53...6.1.0) (2024-08-28)
+
+
+### Features
+
+* allow microphone in the webview ([94e7a51](https://github.com/Cap-go/capacitor-inappbrowser/commit/94e7a51d69982921c5197b5e6c88e78700780aca))
+
+### [6.0.53](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.0.52...6.0.53) (2024-08-28)
+
+
+### Bug Fixes
+
+* remove exemple as it's empty for now ([d423b3c](https://github.com/Cap-go/capacitor-inappbrowser/commit/d423b3c46bb13dab132e40fb51fa912d530cec5e))
+
 ### [6.0.52](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.0.51...6.0.52) (2024-08-26)
 
 ### [6.0.51](https://github.com/Cap-go/capacitor-inappbrowser/compare/6.0.50...6.0.51) (2024-08-26)

@@ -8,15 +8,22 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Picture;
+import android.graphics.drawable.PictureDrawable;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.View;
+import android.view.ViewGroup.LayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.HttpAuthHandler;
+import android.webkit.JavascriptInterface;
 import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
@@ -29,11 +36,24 @@ import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.Toolbar;
+import androidx.annotation.Nullable;
+import com.caverock.androidsvg.SVG;
+import com.caverock.androidsvg.SVGParseException;
+import com.getcapacitor.JSObject;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import org.json.JSONObject;
 
 public class WebViewDialog extends Dialog {
 
@@ -44,13 +64,19 @@ public class WebViewDialog extends Dialog {
   public Activity activity;
   private boolean isInitialized = false;
 
+  Semaphore preShowSemaphore = null;
+  String preshowError = null;
+
   public PermissionRequest currentPermissionRequest;
   public static final int FILE_CHOOSER_REQUEST_CODE = 1000;
   public ValueCallback<Uri> mUploadMessage;
   public ValueCallback<Uri[]> mFilePathCallback;
+  ExecutorService executorService = Executors.newFixedThreadPool(1);
 
   public interface PermissionHandler {
     void handleCameraPermissionRequest(PermissionRequest request);
+
+    void handleMicrophonePermissionRequest(PermissionRequest request);
   }
 
   private PermissionHandler permissionHandler;
@@ -68,10 +94,40 @@ public class WebViewDialog extends Dialog {
     this.isInitialized = false;
   }
 
+  public class JavaScriptInterface {
+
+    @JavascriptInterface
+    public void postMessage(String message) {
+      // Handle message from JavaScript
+      _options.getCallbacks().javascriptCallback(message);
+    }
+  }
+
+  public class PreShowScriptInterface {
+
+    @JavascriptInterface
+    public void error(String error) {
+      // Handle message from JavaScript
+      if (preShowSemaphore != null) {
+        preshowError = error;
+        preShowSemaphore.release();
+      }
+    }
+
+    @JavascriptInterface
+    public void success() {
+      // Handle message from JavaScript
+      if (preShowSemaphore != null) {
+        preShowSemaphore.release();
+      }
+    }
+  }
+
+  @SuppressLint("SetJavaScriptEnabled")
   public void presentWebView() {
     requestWindowFeature(Window.FEATURE_NO_TITLE);
     setCancelable(true);
-    getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+    Objects.requireNonNull(getWindow()).addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
     getWindow().setStatusBarColor(Color.WHITE);
     getWindow().setNavigationBarColor(Color.parseColor("#fafafa"));
 
@@ -83,7 +139,14 @@ public class WebViewDialog extends Dialog {
       );
 
     this._webView = findViewById(R.id.browser_view);
-
+    _webView.addJavascriptInterface(
+      new JavaScriptInterface(),
+      "AndroidInterface"
+    );
+    _webView.addJavascriptInterface(
+      new PreShowScriptInterface(),
+      "PreShowScriptInterface"
+    );
     _webView.getSettings().setJavaScriptEnabled(true);
     _webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(true);
     _webView.getSettings().setDatabaseEnabled(true);
@@ -96,6 +159,7 @@ public class WebViewDialog extends Dialog {
     _webView.getSettings().setUseWideViewPort(true);
     _webView.getSettings().setAllowFileAccessFromFileURLs(true);
     _webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
+    _webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
     _webView.setBackgroundColor(Color.WHITE);
 
     _webView.setWebViewClient(new WebViewClient());
@@ -111,7 +175,8 @@ public class WebViewDialog extends Dialog {
         ) {
           openFileChooser(
             filePathCallback,
-            fileChooserParams.getAcceptTypes()[0]
+            fileChooserParams.getAcceptTypes()[0],
+            fileChooserParams.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE
           );
           return true;
         }
@@ -121,7 +186,7 @@ public class WebViewDialog extends Dialog {
         public void onPermissionRequest(final PermissionRequest request) {
           Log.i(
             "INAPPBROWSER",
-            "onPermissionRequest " + request.getResources().toString()
+            "onPermissionRequest " + Arrays.toString(request.getResources())
           );
           final String[] requestedResources = request.getResources();
           for (String r : requestedResources) {
@@ -134,9 +199,20 @@ public class WebViewDialog extends Dialog {
               if (permissionHandler != null) {
                 permissionHandler.handleCameraPermissionRequest(request);
               }
-              break;
+              return; // Return here to avoid denying the request
+            } else if (r.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+              Log.i("INAPPBROWSER", "RESOURCE_AUDIO_CAPTURE req");
+              // Store the permission request
+              currentPermissionRequest = request;
+              // Initiate the permission request through the plugin
+              if (permissionHandler != null) {
+                permissionHandler.handleMicrophonePermissionRequest(request);
+              }
+              return; // Return here to avoid denying the request
             }
           }
+          // If no matching permission is found, deny the request
+          request.deny();
         }
 
         @Override
@@ -184,14 +260,105 @@ public class WebViewDialog extends Dialog {
     }
   }
 
+  public void postMessageToJS(Object detail) {
+    if (_webView != null) {
+      try {
+        JSONObject jsonObject = new JSONObject();
+        jsonObject.put("detail", detail);
+        String jsonDetail = jsonObject.toString();
+        String script =
+          "window.dispatchEvent(new CustomEvent('messageFromNative', " +
+          jsonDetail +
+          "));";
+        _webView.post(() -> _webView.evaluateJavascript(script, null));
+      } catch (Exception e) {
+        Log.e(
+          "postMessageToJS",
+          "Error sending message to JS: " + e.getMessage()
+        );
+      }
+    }
+  }
+
+  private void injectJavaScriptInterface() {
+    String script =
+      "if (!window.mobileApp) { " +
+      "    window.mobileApp = { " +
+      "        postMessage: function(message) { " +
+      "            if (window.AndroidInterface) { " +
+      "                window.AndroidInterface.postMessage(JSON.stringify(message)); " +
+      "            } " +
+      "        } " +
+      "    }; " +
+      "}";
+    _webView.evaluateJavascript(script, null);
+  }
+
+  private void injectPreShowScript() {
+    //    String script =
+    //        "import('https://unpkg.com/darkreader@4.9.89/darkreader.js').then(() => {DarkReader.enable({ brightness: 100, contrast: 90, sepia: 10 });window.PreLoadScriptInterface.finished()})";
+
+    if (preShowSemaphore != null) {
+      return;
+    }
+
+    String script =
+      "async function preShowFunction() {\n" +
+      _options.getPreShowScript() +
+      '\n' +
+      "};\n" +
+      "preShowFunction().then(() => window.PreShowScriptInterface.success()).catch(err => { console.error('Preshow error', err); window.PreShowScriptInterface.error(JSON.stringify(err, Object.getOwnPropertyNames(err))) })";
+
+    Log.i(
+      "InjectPreShowScript",
+      String.format("PreShowScript script:\n%s", script)
+    );
+
+    preShowSemaphore = new Semaphore(0);
+    activity.runOnUiThread(
+      new Runnable() {
+        @Override
+        public void run() {
+          _webView.evaluateJavascript(script, null);
+        }
+      }
+    );
+
+    try {
+      if (!preShowSemaphore.tryAcquire(10, TimeUnit.SECONDS)) {
+        Log.e(
+          "InjectPreShowScript",
+          "PreShowScript running for over 10 seconds. The plugin will not wait any longer!"
+        );
+        return;
+      }
+      if (preshowError != null && !preshowError.isEmpty()) {
+        Log.e(
+          "InjectPreShowScript",
+          "Error within the user-provided preShowFunction: " + preshowError
+        );
+      }
+    } catch (InterruptedException e) {
+      Log.e(
+        "InjectPreShowScript",
+        "Error when calling InjectPreShowScript: " + e.getMessage()
+      );
+    } finally {
+      preShowSemaphore = null;
+      preshowError = null;
+    }
+  }
+
   private void openFileChooser(
     ValueCallback<Uri[]> filePathCallback,
-    String acceptType
+    String acceptType,
+    boolean isMultiple
   ) {
     mFilePathCallback = filePathCallback;
     Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
     intent.addCategory(Intent.CATEGORY_OPENABLE);
     intent.setType(acceptType); // Default to */*
+    intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, isMultiple);
     activity.startActivityForResult(
       Intent.createChooser(intent, "Select File"),
       FILE_CHOOSER_REQUEST_CODE
@@ -342,14 +509,65 @@ public class WebViewDialog extends Dialog {
     if (TextUtils.equals(_options.getToolbarType(), "activity")) {
       _toolbar.findViewById(R.id.forwardButton).setVisibility(View.GONE);
       _toolbar.findViewById(R.id.backButton).setVisibility(View.GONE);
+      ImageButton buttonNearDoneView = _toolbar.findViewById(
+        R.id.buttonNearDone
+      );
+      buttonNearDoneView.setVisibility(View.GONE);
       //TODO: Add share button functionality
     } else if (TextUtils.equals(_options.getToolbarType(), "navigation")) {
+      ImageButton buttonNearDoneView = _toolbar.findViewById(
+        R.id.buttonNearDone
+      );
+      buttonNearDoneView.setVisibility(View.GONE);
       //TODO: Remove share button when implemented
     } else if (TextUtils.equals(_options.getToolbarType(), "blank")) {
       _toolbar.setVisibility(View.GONE);
     } else {
       _toolbar.findViewById(R.id.forwardButton).setVisibility(View.GONE);
       _toolbar.findViewById(R.id.backButton).setVisibility(View.GONE);
+
+      Options.ButtonNearDone buttonNearDone = _options.getButtonNearDone();
+      if (buttonNearDone != null) {
+        AssetManager assetManager = _context.getAssets();
+
+        // Open the SVG file from assets
+        InputStream inputStream = null;
+        try {
+          ImageButton buttonNearDoneView = _toolbar.findViewById(
+            R.id.buttonNearDone
+          );
+          buttonNearDoneView.setVisibility(View.VISIBLE);
+
+          inputStream = assetManager.open(buttonNearDone.getIcon());
+
+          SVG svg = SVG.getFromInputStream(inputStream);
+          Picture picture = svg.renderToPicture(
+            buttonNearDone.getWidth(),
+            buttonNearDone.getHeight()
+          );
+          PictureDrawable pictureDrawable = new PictureDrawable(picture);
+
+          buttonNearDoneView.setImageDrawable(pictureDrawable);
+          buttonNearDoneView.setOnClickListener(view ->
+            _options.getCallbacks().buttonNearDoneClicked()
+          );
+        } catch (IOException | SVGParseException e) {
+          throw new RuntimeException(e);
+        } finally {
+          if (inputStream != null) {
+            try {
+              inputStream.close();
+            } catch (IOException e) {
+              throw new RuntimeException(e);
+            }
+          }
+        }
+      } else {
+        ImageButton buttonNearDoneView = _toolbar.findViewById(
+          R.id.buttonNearDone
+        );
+        buttonNearDoneView.setVisibility(View.GONE);
+      }
     }
   }
 
@@ -366,15 +584,91 @@ public class WebViewDialog extends Dialog {
 
           if (!url.startsWith("https://") && !url.startsWith("http://")) {
             try {
-              Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+              Intent intent;
+              if (url.startsWith("intent://")) {
+                intent = Intent.parseUri(url, Intent.URI_INTENT_SCHEME);
+              } else {
+                intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+              }
+
               intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
               context.startActivity(intent);
               return true;
             } catch (ActivityNotFoundException e) {
               // Do nothing
+            } catch (URISyntaxException e) {
+              // Do nothing
             }
           }
           return false;
+        }
+
+        @Override
+        public void onReceivedHttpAuthRequest(
+          WebView view,
+          HttpAuthHandler handler,
+          String host,
+          String realm
+        ) {
+          final String sourceUrl = _options.getUrl();
+          final String url = view.getUrl();
+          final JSObject credentials = _options.getCredentials();
+
+          if (
+            credentials != null &&
+            credentials.getString("username") != null &&
+            credentials.getString("password") != null &&
+            sourceUrl != null &&
+            url != null
+          ) {
+            String sourceProtocol = "";
+            String sourceHost = "";
+            int sourcePort = -1;
+            try {
+              URI uri = new URI(sourceUrl);
+              sourceProtocol = uri.getScheme();
+              sourceHost = uri.getHost();
+              sourcePort = uri.getPort();
+              if (
+                sourcePort == -1 && Objects.equals(sourceProtocol, "https")
+              ) sourcePort = 443;
+              else if (
+                sourcePort == -1 && Objects.equals(sourceProtocol, "http")
+              ) sourcePort = 80;
+            } catch (URISyntaxException e) {
+              e.printStackTrace();
+            }
+
+            String protocol = "";
+            int port = -1;
+            try {
+              URI uri = new URI(url);
+              protocol = uri.getScheme();
+              port = uri.getPort();
+              if (port == -1 && Objects.equals(protocol, "https")) port = 443;
+              else if (port == -1 && Objects.equals(protocol, "http")) port =
+                80;
+            } catch (URISyntaxException e) {
+              e.printStackTrace();
+            }
+
+            if (
+              Objects.equals(sourceHost, host) &&
+              Objects.equals(sourceProtocol, protocol) &&
+              sourcePort == port
+            ) {
+              final String username = Objects.requireNonNull(
+                credentials.getString("username")
+              );
+              final String password = Objects.requireNonNull(
+                credentials.getString("password")
+              );
+              handler.proceed(username, password);
+              return;
+            }
+          }
+
+          super.onReceivedHttpAuthRequest(view, handler, host, realm);
         }
 
         @Override
@@ -404,19 +698,60 @@ public class WebViewDialog extends Dialog {
             _options.getCallbacks().urlChangeEvent(url);
           }
           super.doUpdateVisitedHistory(view, url, isReload);
+          injectJavaScriptInterface();
         }
 
         @Override
         public void onPageFinished(WebView view, String url) {
           super.onPageFinished(view, url);
-          _options.getCallbacks().pageLoaded();
           if (!isInitialized) {
             isInitialized = true;
             _webView.clearHistory();
             if (_options.isPresentAfterPageLoad()) {
-              show();
-              _options.getPluginCall().resolve();
+              boolean usePreShowScript =
+                _options.getPreShowScript() != null &&
+                !_options.getPreShowScript().isEmpty();
+              if (!usePreShowScript) {
+                show();
+                _options.getPluginCall().resolve();
+              } else {
+                executorService.execute(
+                  new Runnable() {
+                    @Override
+                    public void run() {
+                      if (
+                        _options.getPreShowScript() != null &&
+                        !_options.getPreShowScript().isEmpty()
+                      ) {
+                        injectPreShowScript();
+                      }
+
+                      activity.runOnUiThread(
+                        new Runnable() {
+                          @Override
+                          public void run() {
+                            show();
+                            _options.getPluginCall().resolve();
+                          }
+                        }
+                      );
+                    }
+                  }
+                );
+              }
             }
+          } else if (
+            _options.getPreShowScript() != null &&
+            !_options.getPreShowScript().isEmpty()
+          ) {
+            executorService.execute(
+              new Runnable() {
+                @Override
+                public void run() {
+                  injectPreShowScript();
+                }
+              }
+            );
           }
 
           ImageButton backButton = _toolbar.findViewById(R.id.backButton);
@@ -438,6 +773,7 @@ public class WebViewDialog extends Dialog {
           }
 
           _options.getCallbacks().pageLoaded();
+          injectJavaScriptInterface();
         }
 
         @Override

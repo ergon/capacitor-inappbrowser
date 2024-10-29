@@ -19,6 +19,11 @@ private struct UrlsHandledByApp {
     static var blank = true
 }
 
+public struct WKWebViewCredentials {
+    var username: String
+    var password: String
+}
+
 @objc public protocol WKWebViewControllerDelegate {
     @objc optional func webViewController(_ controller: WKWebViewController, canDismiss url: URL) -> Bool
 
@@ -38,7 +43,7 @@ extension Dictionary {
     }
 }
 
-open class WKWebViewController: UIViewController {
+open class WKWebViewController: UIViewController, WKScriptMessageHandler {
 
     public init() {
         super.init(nibName: nil, bundle: nil)
@@ -48,22 +53,26 @@ open class WKWebViewController: UIViewController {
         super.init(coder: aDecoder)
     }
 
-    public init(source: WKWebSource?) {
+    public init(source: WKWebSource?, credentials: WKWebViewCredentials? = nil) {
         super.init(nibName: nil, bundle: nil)
         self.source = source
+        self.credentials = credentials
         self.initWebview()
     }
 
-    public init(url: URL) {
+    public init(url: URL, credentials: WKWebViewCredentials? = nil) {
         super.init(nibName: nil, bundle: nil)
         self.source = .remote(url)
+        self.credentials = credentials
         self.initWebview()
     }
 
-    public init(url: URL, headers: [String: String], isInspectable: Bool) {
+    public init(url: URL, headers: [String: String], isInspectable: Bool, credentials: WKWebViewCredentials? = nil, preventDeeplink: Bool) {
         super.init(nibName: nil, bundle: nil)
         self.source = .remote(url)
+        self.credentials = credentials
         self.setHeaders(headers: headers)
+        self.setPreventDeeplink(preventDeeplink: preventDeeplink)
         self.initWebview(isInspectable: isInspectable)
     }
 
@@ -91,6 +100,10 @@ open class WKWebViewController: UIViewController {
     open var closeModalCancel = ""
     open var ignoreUntrustedSSLError = false
     var viewWasPresented = false
+    var preventDeeplink: Bool = false
+
+    internal var preShowSemaphore: DispatchSemaphore?
+    internal var preShowError: String?
 
     func setHeaders(headers: [String: String]) {
         self.headers = headers
@@ -102,6 +115,10 @@ open class WKWebViewController: UIViewController {
         if let userAgent = userAgent {
             self.customUserAgent = userAgent
         }
+    }
+
+    func setPreventDeeplink(preventDeeplink: Bool) {
+        self.preventDeeplink = preventDeeplink
     }
 
     internal var customUserAgent: String? {
@@ -133,6 +150,7 @@ open class WKWebViewController: UIViewController {
 
     open var websiteTitleInNavigationBar = true
     open var doneBarButtonItemPosition: NavigationBarPosition = .right
+    open var preShowScript: String?
     open var leftNavigationBarItemTypes: [BarButtonItemType] = []
     open var rightNavigaionBarItemTypes: [BarButtonItemType] = []
     open var toolbarItemTypes: [BarButtonItemType] = [.back, .forward, .reload, .activity]
@@ -143,6 +161,8 @@ open class WKWebViewController: UIViewController {
     open var stopBarButtonItemImage: UIImage?
     open var activityBarButtonItemImage: UIImage?
     open var statusBarView: UIView?
+
+    open var buttonNearDoneIcon: UIImage?
 
     fileprivate var webView: WKWebView?
     fileprivate var progressView: UIProgressView?
@@ -194,6 +214,8 @@ open class WKWebViewController: UIViewController {
         return UIBarButtonItem(barButtonSystemItem: .flexibleSpace, target: nil, action: nil)
     }()
 
+    fileprivate var credentials: WKWebViewCredentials?
+
     deinit {
         webView?.removeObserver(self, forKeyPath: estimatedProgressKeyPath)
         if websiteTitleInNavigationBar {
@@ -209,6 +231,63 @@ open class WKWebViewController: UIViewController {
         }
     }
 
+    open func setCredentials(credentials: WKWebViewCredentials?) {
+        self.credentials = credentials
+    }
+
+    // Method to send a message from Swift to JavaScript
+    open func postMessageToJS(message: [String: Any]) {
+        if let jsonData = try? JSONSerialization.data(withJSONObject: message, options: []),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            let script = "window.dispatchEvent(new CustomEvent('messageFromNative', { detail: \(jsonString) }));"
+            webView?.evaluateJavaScript(script, completionHandler: nil)
+        }
+    }
+
+    // Method to receive messages from JavaScript
+    public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        if message.name == "messageHandler" {
+            if let messageBody = message.body as? [String: Any] {
+                print("Received message from JavaScript:", messageBody)
+                self.capBrowserPlugin?.notifyListeners("messageFromWebview", data: messageBody)
+            } else {
+                print("Received non-dictionary message from JavaScript:", message.body)
+                self.capBrowserPlugin?.notifyListeners("messageFromWebview", data: ["rawMessage": String(describing: message.body)])
+            }
+        } else if message.name == "preShowScriptSuccess" {
+            guard let semaphore = preShowSemaphore else {
+                print("[InAppBrowser - preShowScriptSuccess]: Semaphore not found")
+                return
+            }
+
+            semaphore.signal()
+        } else if message.name == "preShowScriptError" {
+            guard let semaphore = preShowSemaphore else {
+                print("[InAppBrowser - preShowScriptError]: Semaphore not found")
+                return
+            }
+            print("[InAppBrowser - preShowScriptError]: Error!!!!")
+            semaphore.signal()
+        }
+    }
+
+    func injectJavaScriptInterface() {
+        let script = """
+                if (!window.mobileApp) {
+                        window.mobileApp = {
+                                postMessage: function(message) {
+                                        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.messageHandler) {
+                                                window.webkit.messageHandlers.messageHandler.postMessage(message);
+                                        }
+                                }
+                        };
+                }
+                """
+        DispatchQueue.main.async {
+            self.webView?.evaluateJavaScript(script, completionHandler: nil)
+        }
+    }
+
     open func initWebview(isInspectable: Bool = true) {
 
         self.view.backgroundColor = UIColor.white
@@ -218,6 +297,11 @@ open class WKWebViewController: UIViewController {
 
         let webConfiguration = WKWebViewConfiguration()
         webConfiguration.allowsInlineMediaPlayback = true
+        let userContentController = WKUserContentController()
+        userContentController.add(self, name: "messageHandler")
+        userContentController.add(self, name: "preShowScriptError")
+        userContentController.add(self, name: "preShowScriptSuccess")
+        webConfiguration.userContentController = userContentController
         let webView = WKWebView(frame: .zero, configuration: webConfiguration)
 
         if webView.responds(to: Selector(("setInspectable:"))) {
@@ -353,26 +437,30 @@ open class WKWebViewController: UIViewController {
     override open func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
         switch keyPath {
         case estimatedProgressKeyPath?:
-            guard let estimatedProgress = self.webView?.estimatedProgress else {
-                return
-            }
-            self.progressView?.alpha = 1
-            self.progressView?.setProgress(Float(estimatedProgress), animated: true)
+            DispatchQueue.main.async {
+                guard let estimatedProgress = self.webView?.estimatedProgress else {
+                    return
+                }
+                self.progressView?.alpha = 1
+                self.progressView?.setProgress(Float(estimatedProgress), animated: true)
 
-            if estimatedProgress >= 1.0 {
-                UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
-                    self.progressView?.alpha = 0
-                }, completion: {
-                    _ in
-                    self.progressView?.setProgress(0, animated: false)
-                })
+                if estimatedProgress >= 1.0 {
+                    UIView.animate(withDuration: 0.3, delay: 0.3, options: .curveEaseOut, animations: {
+                        self.progressView?.alpha = 0
+                    }, completion: {
+                        _ in
+                        self.progressView?.setProgress(0, animated: false)
+                    })
+                }
             }
         case titleKeyPath?:
             if self.hasDynamicTitle {
                 self.navigationItem.title = webView?.url?.host
             }
         case "URL":
+
             self.capBrowserPlugin?.notifyListeners("urlChangeEvent", data: ["url": webView?.url?.absoluteString ?? ""])
+            self.injectJavaScriptInterface()
         default:
             super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
         }
@@ -394,7 +482,9 @@ public extension WKWebViewController {
     }
 
     func load(remote: URL) {
-        webView?.load(createRequest(url: remote))
+        DispatchQueue.main.async {
+            self.webView?.load(self.createRequest(url: remote))
+        }
     }
 
     func load(file: URL, access: URL) {
@@ -415,7 +505,9 @@ public extension WKWebViewController {
     }
 
     func executeScript(script: String, completion: ((Any?, Error?) -> Void)? = nil) {
-        webView?.evaluateJavaScript(script, completionHandler: completion)
+        DispatchQueue.main.async { [weak self] in
+            self?.webView?.evaluateJavaScript(script, completionHandler: completion)
+        }
     }
 }
 
@@ -535,13 +627,17 @@ fileprivate extension WKWebViewController {
             return UIBarButtonItem()
         }
 
-        navigationItem.rightBarButtonItems = rightNavigaionBarItemTypes.map {
+        var rightBarButtons = rightNavigaionBarItemTypes.map {
             barButtonItemType in
             if let barButtonItem = barButtonItem(barButtonItemType) {
                 return barButtonItem
             }
             return UIBarButtonItem()
         }
+        if rightBarButtons.count == 1 && buttonNearDoneIcon != nil && rightBarButtons[0] == doneBarButtonItem {
+            rightBarButtons.append(UIBarButtonItem(image: buttonNearDoneIcon, style: .plain, target: self, action: #selector(buttonNearDoneDidClick)))
+        }
+        navigationItem.rightBarButtonItems = rightBarButtons
 
         if toolbarItemTypes.count > 0 {
             for index in 0..<toolbarItemTypes.count - 1 {
@@ -549,13 +645,14 @@ fileprivate extension WKWebViewController {
             }
         }
 
-        setToolbarItems(toolbarItemTypes.map {
+        let gen = toolbarItemTypes.map {
             barButtonItemType -> UIBarButtonItem in
             if let barButtonItem = barButtonItem(barButtonItemType) {
                 return barButtonItem
             }
             return UIBarButtonItem()
-        }, animated: true)
+        }
+        setToolbarItems(gen, animated: true)
     }
 
     func updateBarButtonItems() {
@@ -674,6 +771,10 @@ fileprivate extension WKWebViewController {
         webView?.goForward()
     }
 
+    @objc func buttonNearDoneDidClick(sender: AnyObject) {
+        self.capBrowserPlugin?.notifyListeners("buttonNearDoneClick", data: [:])
+    }
+
     @objc func reloadDidClick(sender: AnyObject) {
         webView?.stopLoading()
         if webView?.url != nil {
@@ -723,6 +824,7 @@ fileprivate extension WKWebViewController {
             self.present(alert, animated: true, completion: nil)
         } else {
             let activityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
+            #imageLiteral(resourceName: "simulator_screenshot_B8B44B8D-EB30-425C-9BF4-1F37697A8459.png")
             activityViewController.setValue(self.shareSubject ?? self.title, forKey: "subject")
             activityViewController.popoverPresentationController?.barButtonItem = (sender as! UIBarButtonItem)
             self.present(activityViewController, animated: true, completion: nil)
@@ -770,6 +872,47 @@ extension WKWebViewController: WKUIDelegate {
 
 // MARK: - WKNavigationDelegate
 extension WKWebViewController: WKNavigationDelegate {
+    internal func injectPreShowScript() {
+        if preShowSemaphore != nil {
+            return
+        }
+
+        // TODO: implement interface
+        let script = """
+                        async function preShowFunction() {
+                        \(self.preShowScript ?? "")
+                        };
+                        preShowFunction().then(
+                                () => window.webkit.messageHandlers.preShowScriptSuccess.postMessage({})
+                        ).catch(
+                                err => {
+                                        console.error('Preshow error', err);
+                                        window.webkit.messageHandlers.preShowScriptError.postMessage(JSON.stringify(err, Object.getOwnPropertyNames(err)));
+                                }
+                        )
+                        """
+        print("[InAppBrowser - InjectPreShowScript] PreShowScript script: \(script)")
+
+        self.preShowSemaphore = DispatchSemaphore(value: 0)
+        self.executeScript(script: script) // this will run on the main thread
+
+        defer {
+            self.preShowSemaphore = nil
+            self.preShowError = nil
+        }
+
+        if self.preShowSemaphore?.wait(timeout: .now() + 10) == .timedOut {
+            print("[InAppBrowser - InjectPreShowScript] PreShowScript running for over 10 seconds. The plugin will not wait any longer!")
+            return
+        }
+
+        //            "async function preShowFunction() {\n" +
+        //            self.preShowScript + "\n" +
+        //            "};\n" +
+        //            "preShowFunction().then(() => window.PreShowScriptInterface.success()).catch(err => { console.error('Preshow error', err); window.PreShowScriptInterface.error(JSON.stringify(err, Object.getOwnPropertyNames(err))) })";
+
+    }
+
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         updateBarButtonItems()
         self.progressView?.progress = 0
@@ -780,7 +923,21 @@ extension WKWebViewController: WKNavigationDelegate {
     }
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if !didpageInit && self.capBrowserPlugin?.isPresentAfterPageLoad == true {
-            self.capBrowserPlugin?.presentView()
+            // injectPreShowScript will block, don't execute on the main thread
+            if self.preShowScript != nil && !self.preShowScript!.isEmpty {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    self.injectPreShowScript()
+                    DispatchQueue.main.async { [weak self] in
+                        self?.capBrowserPlugin?.presentView()
+                    }
+                }
+            } else {
+                self.capBrowserPlugin?.presentView()
+            }
+        } else if self.preShowScript != nil && !self.preShowScript!.isEmpty && self.capBrowserPlugin?.isPresentAfterPageLoad == true {
+            DispatchQueue.global(qos: .userInitiated).async {
+                self.injectPreShowScript()
+            }
         }
         didpageInit = true
         updateBarButtonItems()
@@ -789,6 +946,8 @@ extension WKWebViewController: WKNavigationDelegate {
             self.url = url
             delegate?.webViewController?(self, didFinish: url)
         }
+        self.injectJavaScriptInterface()
+        self.capBrowserPlugin?.notifyListeners("browserPageLoaded", data: [:])
     }
 
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -798,6 +957,7 @@ extension WKWebViewController: WKNavigationDelegate {
             self.url = url
             delegate?.webViewController?(self, didFail: url, withError: error)
         }
+        self.capBrowserPlugin?.notifyListeners("pageLoadError", data: [:])
     }
 
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -807,10 +967,16 @@ extension WKWebViewController: WKNavigationDelegate {
             self.url = url
             delegate?.webViewController?(self, didFail: url, withError: error)
         }
+        self.capBrowserPlugin?.notifyListeners("pageLoadError", data: [:])
     }
 
     public func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        if let bypassedSSLHosts = bypassedSSLHosts, bypassedSSLHosts.contains(challenge.protectionSpace.host) {
+        if let credentials = credentials,
+           challenge.protectionSpace.receivesCredentialSecurely,
+           let url = webView.url, challenge.protectionSpace.host == url.host, challenge.protectionSpace.protocol == url.scheme, challenge.protectionSpace.port == url.port ?? (url.scheme == "https" ? 443 : url.scheme == "http" ? 80 : nil) {
+            let urlCredential = URLCredential(user: credentials.username, password: credentials.password, persistence: .none)
+            completionHandler(.useCredential, urlCredential)
+        } else if let bypassedSSLHosts = bypassedSSLHosts, bypassedSSLHosts.contains(challenge.protectionSpace.host) {
             let credential = URLCredential(trust: challenge.protectionSpace.serverTrust!)
             completionHandler(.useCredential, credential)
         } else {
@@ -827,17 +993,27 @@ extension WKWebViewController: WKNavigationDelegate {
             }
             let credential = URLCredential(trust: serverTrust)
             completionHandler(.useCredential, credential)
-
         }
+        self.injectJavaScriptInterface()
     }
 
     public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         var actionPolicy: WKNavigationActionPolicy = .allow
-        defer {
-            decisionHandler(actionPolicy)
+
+        if self.preventDeeplink {
+            actionPolicy = .preventDeeplinkActionPolicy
         }
+
         guard let u = navigationAction.request.url else {
-            print("Cannot handle empty URLs")
+            decisionHandler(actionPolicy)
+            return
+        }
+
+        // Check if the URL is an App Store URL
+        if u.absoluteString.contains("apps.apple.com") {
+            UIApplication.shared.open(u, options: [:], completionHandler: nil)
+            // Cancel the navigation in the web view
+            decisionHandler(.cancel)
             return
         }
 
@@ -860,10 +1036,16 @@ extension WKWebViewController: WKNavigationDelegate {
         if let navigationType = NavigationType(rawValue: navigationAction.navigationType.rawValue), let result = delegate?.webViewController?(self, decidePolicy: u, navigationType: navigationType) {
             actionPolicy = result ? .allow : .cancel
         }
+        self.injectJavaScriptInterface()
+        decisionHandler(actionPolicy)
     }
 }
 
 class BlockBarButtonItem: UIBarButtonItem {
 
     var block: ((WKWebViewController) -> Void)?
+}
+
+extension WKNavigationActionPolicy {
+    static let preventDeeplinkActionPolicy = WKNavigationActionPolicy(rawValue: WKNavigationActionPolicy.allow.rawValue + 2)!
 }
