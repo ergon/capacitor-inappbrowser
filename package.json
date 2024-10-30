@@ -1,6 +1,6 @@
 {
   "name": "@capgo/inappbrowser",
-  "version": "6.8.18",
+  "version": "6.8.18-ergon1",
   "description": "Capacitor plugin in app browser",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -17,7 +17,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Cap-go/capacitor-inappbrowser.git"
+    "url": "git+https://github.com/ergon/capacitor-inappbrowser.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.ergon.ch"
   },
   "bugs": {
     "url": "https://github.com/Cap-go/capacitor-inappbrowser/issues"
