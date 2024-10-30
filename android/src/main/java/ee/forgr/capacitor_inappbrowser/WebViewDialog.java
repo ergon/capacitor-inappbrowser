@@ -127,10 +127,12 @@ public class WebViewDialog extends Dialog {
   public void presentWebView() {
     requestWindowFeature(Window.FEATURE_NO_TITLE);
     setCancelable(true);
-    Objects.requireNonNull(getWindow()).setFlags(
-      WindowManager.LayoutParams.FLAG_FULLSCREEN,
-      WindowManager.LayoutParams.FLAG_FULLSCREEN
+    Objects.requireNonNull(getWindow()).addFlags(
+      WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
     );
+    getWindow().setStatusBarColor(Color.WHITE);
+    getWindow().setNavigationBarColor(Color.parseColor("#fafafa"));
+
     setContentView(R.layout.activity_browser);
     getWindow()
       .setLayout(
@@ -160,6 +162,7 @@ public class WebViewDialog extends Dialog {
     _webView.getSettings().setAllowFileAccessFromFileURLs(true);
     _webView.getSettings().setAllowUniversalAccessFromFileURLs(true);
     _webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+    _webView.setBackgroundColor(Color.WHITE);
 
     _webView.setWebViewClient(new WebViewClient());
 

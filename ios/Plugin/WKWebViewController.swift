@@ -160,6 +160,7 @@ open class WKWebViewController: UIViewController, WKScriptMessageHandler {
     open var reloadBarButtonItemImage: UIImage?
     open var stopBarButtonItemImage: UIImage?
     open var activityBarButtonItemImage: UIImage?
+    open var statusBarView: UIView?
 
     open var buttonNearDoneIcon: UIImage?
 
@@ -295,6 +296,7 @@ open class WKWebViewController: UIViewController, WKScriptMessageHandler {
         self.edgesForExtendedLayout = [.bottom]
 
         let webConfiguration = WKWebViewConfiguration()
+        webConfiguration.allowsInlineMediaPlayback = true
         let userContentController = WKUserContentController()
         userContentController.add(self, name: "messageHandler")
         userContentController.add(self, name: "preShowScriptError")
@@ -393,15 +395,42 @@ open class WKWebViewController: UIViewController, WKScriptMessageHandler {
 
     override open func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        self.setNeedsStatusBarAppearanceUpdate()
+
+        // Set the background color for the status bar
+        if #available(iOS 13.0, *) {
+            let statusBarFrame = UIApplication.shared.windows.first?.windowScene?.statusBarManager?.statusBarFrame ?? CGRect.zero
+            self.statusBarView = UIView(frame: statusBarFrame)
+            if let statusBarView = self.statusBarView {
+                 statusBarView.backgroundColor = UIColor.white
+                 UIApplication.shared.windows.first?.addSubview(statusBarView)
+            }
+        }
+
         if !self.viewWasPresented {
             self.setupViewElements()
             setUpState()
             self.viewWasPresented = true
         }
+
+        if let doneButton = self.navigationItem.rightBarButtonItem, doneButton.style == .done {
+            let closeButton = UIBarButtonItem(barButtonSystemItem: .stop, target: self, action: #selector(closeWebView))
+            closeButton.tintColor = UIColor.black
+            self.navigationItem.rightBarButtonItem = closeButton
+        }
+    }
+
+    @objc func closeWebView() {
+        self.dismiss(animated: true, completion: nil)
     }
 
     override open func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        if #available(iOS 13.0, *) {
+          if let statusBarView = self.statusBarView {
+              statusBarView.removeFromSuperview()
+          }
+        }
         rollbackState()
     }
 
