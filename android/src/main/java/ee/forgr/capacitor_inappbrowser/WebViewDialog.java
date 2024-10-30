@@ -127,7 +127,9 @@ public class WebViewDialog extends Dialog {
   public void presentWebView() {
     requestWindowFeature(Window.FEATURE_NO_TITLE);
     setCancelable(true);
-    Objects.requireNonNull(getWindow()).addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
+    Objects.requireNonNull(getWindow()).addFlags(
+      WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
+    );
     getWindow().setStatusBarColor(Color.WHITE);
     getWindow().setNavigationBarColor(Color.parseColor("#fafafa"));
 
