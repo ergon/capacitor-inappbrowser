@@ -235,6 +235,7 @@ public class InAppBrowserPlugin: CAPPlugin {
             self.navigationWebViewController = UINavigationController.init(rootViewController: self.webViewController!)
             self.navigationWebViewController?.navigationBar.isTranslucent = false
             self.navigationWebViewController?.navigationBar.barTintColor = UIColor.white
+            self.navigationWebViewController?.navigationBar.shadowImage = UIImage()
             self.navigationWebViewController?.toolbar.isTranslucent = false
             self.navigationWebViewController?.navigationBar.backgroundColor = backgroundColor
             self.navigationWebViewController?.toolbar.backgroundColor = backgroundColor
