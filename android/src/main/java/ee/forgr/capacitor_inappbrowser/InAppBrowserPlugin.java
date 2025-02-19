@@ -28,6 +28,8 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -42,10 +44,6 @@ import org.json.JSONObject;
     @Permission(
       alias = "storage",
       strings = { Manifest.permission.READ_EXTERNAL_STORAGE }
-    ),
-    @Permission(
-      alias = "storage",
-      strings = { Manifest.permission.READ_MEDIA_IMAGES }
     ),
   },
   requestCodes = { WebViewDialog.FILE_CHOOSER_REQUEST_CODE }
@@ -426,6 +424,18 @@ public class InAppBrowserPlugin
       Boolean.TRUE.equals(call.getBoolean("ignoreUntrustedSSLError", false))
     );
 
+    String proxyRequestsStr = call.getString("proxyRequests");
+    if (proxyRequestsStr != null) {
+      try {
+        options.setProxyRequestsPattern(Pattern.compile(proxyRequestsStr));
+      } catch (PatternSyntaxException e) {
+        Log.e(
+          "WebViewDialog",
+          String.format("Pattern '%s' is not a valid pattern", proxyRequestsStr)
+        );
+      }
+    }
+
     try {
       Options.ButtonNearDone buttonNearDone =
         Options.ButtonNearDone.generateFromPluginCall(
@@ -552,10 +562,11 @@ public class InAppBrowserPlugin
               getContext(),
               android.R.style.Theme_NoTitleBar,
               options,
-              InAppBrowserPlugin.this
+              InAppBrowserPlugin.this,
+              getBridge().getWebView()
             );
-            webViewDialog.presentWebView();
             webViewDialog.activity = InAppBrowserPlugin.this.getActivity();
+            webViewDialog.presentWebView();
           }
         }
       );
@@ -573,6 +584,7 @@ public class InAppBrowserPlugin
       call.reject("No event data provided");
       return;
     }
+
     Log.d("InAppBrowserPlugin", "Event data: " + eventData.toString());
     this.getActivity()
       .runOnUiThread(
@@ -620,6 +632,26 @@ public class InAppBrowserPlugin
             }
           }
         );
+    }
+    call.resolve();
+  }
+
+  @PluginMethod
+  public void lsuakdchgbbaHandleProxiedRequest(PluginCall call) {
+    if (webViewDialog != null) {
+      Boolean ok = call.getBoolean("ok", false);
+      String id = call.getString("id");
+      if (id == null) {
+        Log.e("InAppBrowserProxy", "CRITICAL ERROR, proxy id = null");
+        return;
+      }
+      if (Boolean.FALSE.equals(ok)) {
+        String result = call.getString("result", "");
+        webViewDialog.handleProxyResultError(result, id);
+      } else {
+        JSONObject object = call.getObject("result");
+        webViewDialog.handleProxyResultOk(object, id);
+      }
     }
     call.resolve();
   }
