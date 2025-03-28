@@ -1716,6 +1716,10 @@ public class WebViewDialog extends Dialog implements ProxyResponseRouting.ProxyR
             WindowManager.LayoutParams.FLAG_FULLSCREEN,
             WindowManager.LayoutParams.FLAG_FULLSCREEN
         );
+
+        // Set a light grey navigation bar (at very bottom).
+        getWindow().setNavigationBarColor(Color.parseColor("#fafafa"));
+
         setContentView(R.layout.activity_browser);
 
         // If custom dimensions are set, configure for touch passthrough
