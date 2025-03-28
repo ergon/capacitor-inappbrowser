@@ -263,6 +263,10 @@ public class WebViewDialog extends Dialog {
       WindowManager.LayoutParams.FLAG_FULLSCREEN,
       WindowManager.LayoutParams.FLAG_FULLSCREEN
     );
+
+    // Set a light grey navigation bar (at very bottom).
+    getWindow().setNavigationBarColor(Color.parseColor("#fafafa"));
+
     setContentView(R.layout.activity_browser);
     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
