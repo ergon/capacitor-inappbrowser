@@ -202,7 +202,7 @@ public class InAppBrowserPlugin extends Plugin implements WebViewDialog.Permissi
     @PermissionCallback
     private void microphonePermissionCallback(PluginCall call) {
         if (getPermissionState("microphone") == PermissionState.GRANTED) {
-            grantCameraAndMicrophonePermission();
+            grantMicrophonePermission();
         } else {
             if (currentPermissionRequest != null) {
                 currentPermissionRequest.deny();
@@ -214,34 +214,19 @@ public class InAppBrowserPlugin extends Plugin implements WebViewDialog.Permissi
         }
     }
 
-    private void grantCameraAndMicrophonePermission() {
-        if (currentPermissionRequest != null) {
-            currentPermissionRequest.grant(
-                new String[] { PermissionRequest.RESOURCE_VIDEO_CAPTURE, PermissionRequest.RESOURCE_AUDIO_CAPTURE }
-            );
-            currentPermissionRequest = null;
-        }
-    }
-
     public void handleCameraPermissionRequest(PermissionRequest request) {
         this.currentPermissionRequest = request;
         if (getPermissionState("camera") != PermissionState.GRANTED) {
             requestPermissionForAlias("camera", null, "cameraPermissionCallback");
-        } else if (getPermissionState("microphone") != PermissionState.GRANTED) {
-            requestPermissionForAlias("microphone", null, "microphonePermissionCallback");
         } else {
-            grantCameraAndMicrophonePermission();
+            grantCameraPermission();
         }
     }
 
     @PermissionCallback
     private void cameraPermissionCallback(PluginCall call) {
         if (getPermissionState("camera") == PermissionState.GRANTED) {
-            if (getPermissionState("microphone") != PermissionState.GRANTED) {
-                requestPermissionForAlias("microphone", null, "microphonePermissionCallback");
-            } else {
-                grantCameraAndMicrophonePermission();
-            }
+            grantCameraPermission();
         } else {
             if (currentPermissionRequest != null) {
                 currentPermissionRequest.deny();
