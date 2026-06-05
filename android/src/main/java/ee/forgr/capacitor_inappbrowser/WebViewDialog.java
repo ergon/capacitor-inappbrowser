@@ -1286,10 +1286,15 @@ public class WebViewDialog extends Dialog {
                     }
 
                     // Fix AppBarLayout position
-                    ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) appBarLayout.getLayoutParams();
-                    params.topMargin = statusBarHeight;
-                    appBarLayout.setLayoutParams(params);
+                    appBarLayout.setPadding(0, statusBarHeight, 0, 0);
                     appBarLayout.setBackgroundColor(finalBgColor);
+
+                    View coordinator = findViewById(R.id.coordinator_layout);
+                    if (coordinator != null) {
+                        // Set the CoordinatorLayout background to match toolbar color so the
+                        // bottom navigation bar is the correct color.
+                        coordinator.setBackgroundColor(finalBgColor);
+                    }
                 });
             }
         }
