@@ -827,6 +827,7 @@ open class WKWebViewController: UIViewController, WKScriptMessageHandler {
 
         // Enable background task processing
         webConfiguration.processPool = WKProcessPool()
+        webConfiguration.websiteDataStore = WKWebsiteDataStore.nonPersistent()
 
         // Enable JavaScript to run automatically (needed for preShowScript and Firebase polyfill)
         webConfiguration.preferences.javaScriptCanOpenWindowsAutomatically = true
